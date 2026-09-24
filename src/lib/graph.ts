@@ -10,54 +10,45 @@ type GqlTarget =
   | { subgraphId: string; ipfsHash?: never }
   | { ipfsHash: string; subgraphId?: never };
 
-
-/** Studio often shows UUID keys with dashes; the gateway rejects those as malformed. */
+/**
+ * Studio keys are 32-char hex. Strip noise people accidentally paste:
+ * dashes (UUID display), Bearer prefix, full gateway URLs, whitespace.
+ */
 export function normalizeGraphApiKey(raw: string): string {
   let k = raw.trim().replace(/^Bearer\s+/i, "");
-  // Pasted full gateway URL → extract the key segment
   const fromUrl = k.match(
     /gateway\.thegraph\.com\/api\/([^/]+)\/(?:subgraphs|deployments)\//i,
   );
   if (fromUrl) k = fromUrl[1];
-  // UUID form → 32-char hex the gateway expects
+  // Remove whitespace / zero-width junk from a copy-paste
+  k = k.replace(/[\s\u200b\u200c\u200d\ufeff]/g, "");
   if (/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(k)) {
     k = k.replace(/-/g, "");
   }
   return k;
 }
 
-function formatGqlAuthError(message: string): string {
+function isAuthFailure(message: string): boolean {
   const m = message.toLowerCase();
-  if (m.includes("malformed api key") || m.includes("api key not found") || m.includes("auth error")) {
-    return (
-      "That Studio key was rejected by The Graph gateway. " +
-      "Click Clear key to use demo mode (no key needed), or paste only the key itself " +
-      "(not a full URL). New UUID-style keys are normalized automatically after this fix."
-    );
-  }
-  return message;
+  return (
+    m.includes("auth error") ||
+    m.includes("malformed api key") ||
+    m.includes("api key not found") ||
+    m.includes("missing authorization")
+  );
 }
 
+/** Keep the gateway's real reason; add a short demo-mode hint. */
+function formatGqlAuthError(message: string): string {
+  if (!isAuthFailure(message)) return message;
+  return (
+    `${message} — Tip: click Clear key to use demo mode (shared server key, no paste). ` +
+    `Own keys must be an active Subgraph Studio API key from thegraph.com/studio ` +
+    `(32 hex chars). If Studio has domain/subgraph allowlists, add this site or clear them.`
+  );
+}
 
-async function gqlDirect(
-  apiKey: string,
-  target: GqlTarget,
-  query: string,
-  variables?: GqlVars,
-): Promise<unknown> {
-  const path = target.subgraphId
-    ? `subgraphs/id/${target.subgraphId}`
-    : `deployments/id/${target.ipfsHash}`;
-  // Prefer Bearer (no key in URL). Fall back to path-style if needed.
-  const url = `https://gateway.thegraph.com/api/${path}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({ query, variables }),
-  });
+async function parseGqlResponse(res: Response): Promise<unknown> {
   const json = (await res.json()) as {
     data?: unknown;
     errors?: { message: string }[];
@@ -75,6 +66,50 @@ async function gqlDirect(
     );
   }
   return json.data;
+}
+
+async function gqlDirect(
+  apiKey: string,
+  target: GqlTarget,
+  query: string,
+  variables?: GqlVars,
+): Promise<unknown> {
+  const path = target.subgraphId
+    ? `subgraphs/id/${target.subgraphId}`
+    : `deployments/id/${target.ipfsHash}`;
+  const body = JSON.stringify({ query, variables });
+
+  // Docs: URL-embedded key is optimal for subgraph queries.
+  const pathUrl = `https://gateway.thegraph.com/api/${apiKey}/${path}`;
+  try {
+    const res = await fetch(pathUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+    return await parseGqlResponse(res);
+  } catch (pathErr) {
+    const pathMsg = pathErr instanceof Error ? pathErr.message : String(pathErr);
+    // Only fall back to Bearer for auth failures — keep real GraphQL errors.
+    if (!isAuthFailure(pathMsg)) throw pathErr;
+
+    const bearerUrl = `https://gateway.thegraph.com/api/${path}`;
+    try {
+      const res = await fetch(bearerUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body,
+      });
+      return await parseGqlResponse(res);
+    } catch (bearerErr) {
+      const bearerMsg =
+        bearerErr instanceof Error ? bearerErr.message : String(bearerErr);
+      throw new Error(bearerMsg);
+    }
+  }
 }
 
 async function gqlProxy(

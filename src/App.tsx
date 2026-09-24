@@ -604,9 +604,9 @@ export default function App() {
           </button>
         </div>
         <p className="hint">
-          Leave blank for demo mode — no key needed. If you paste a Studio key, use the
-          key alone (not a full URL). UUID keys with dashes are fine; we strip
-          them for the gateway. Keys stay in this browser only.
+          Prefer demo mode (leave blank) — it uses the shared server key. Pasting your own
+          Studio key is optional and talks to gateway.thegraph.com from this browser; the
+          key must exist in Subgraph Studio and any domain allowlist must include this site.
         </p>
       </section>
 

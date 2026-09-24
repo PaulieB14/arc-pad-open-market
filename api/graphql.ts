@@ -60,20 +60,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     gatewayPath = `deployments/id/${ipfsHash}`;
   }
 
-  // Studio UUID keys with dashes are "malformed" on the gateway — strip them.
-  const normalized = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
-    key.trim(),
-  )
-    ? key.trim().replace(/-/g, "")
-    : key.trim();
-  const url = `https://gateway.thegraph.com/api/${gatewayPath}`;
+  // Normalize UUID-dashed Studio keys; use path-embedded auth (docs: optimal for subgraphs).
+  let normalized = key.trim();
+  if (/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(normalized)) {
+    normalized = normalized.replace(/-/g, "");
+  }
+  const url = `https://gateway.thegraph.com/api/${normalized}/${gatewayPath}`;
   try {
     const upstream = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${normalized}`,
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query, variables }),
     });
     const text = await upstream.text();
