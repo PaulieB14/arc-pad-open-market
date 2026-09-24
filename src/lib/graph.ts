@@ -10,6 +10,35 @@ type GqlTarget =
   | { subgraphId: string; ipfsHash?: never }
   | { ipfsHash: string; subgraphId?: never };
 
+
+/** Studio often shows UUID keys with dashes; the gateway rejects those as malformed. */
+export function normalizeGraphApiKey(raw: string): string {
+  let k = raw.trim().replace(/^Bearer\s+/i, "");
+  // Pasted full gateway URL → extract the key segment
+  const fromUrl = k.match(
+    /gateway\.thegraph\.com\/api\/([^/]+)\/(?:subgraphs|deployments)\//i,
+  );
+  if (fromUrl) k = fromUrl[1];
+  // UUID form → 32-char hex the gateway expects
+  if (/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(k)) {
+    k = k.replace(/-/g, "");
+  }
+  return k;
+}
+
+function formatGqlAuthError(message: string): string {
+  const m = message.toLowerCase();
+  if (m.includes("malformed api key") || m.includes("api key not found") || m.includes("auth error")) {
+    return (
+      "That Studio key was rejected by The Graph gateway. " +
+      "Click Clear key to use demo mode (no key needed), or paste only the key itself " +
+      "(not a full URL). New UUID-style keys are normalized automatically after this fix."
+    );
+  }
+  return message;
+}
+
+
 async function gqlDirect(
   apiKey: string,
   target: GqlTarget,
@@ -19,10 +48,14 @@ async function gqlDirect(
   const path = target.subgraphId
     ? `subgraphs/id/${target.subgraphId}`
     : `deployments/id/${target.ipfsHash}`;
-  const url = `https://gateway.thegraph.com/api/${apiKey}/${path}`;
+  // Prefer Bearer (no key in URL). Fall back to path-style if needed.
+  const url = `https://gateway.thegraph.com/api/${path}`;
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
     body: JSON.stringify({ query, variables }),
   });
   const json = (await res.json()) as {
@@ -30,10 +63,16 @@ async function gqlDirect(
     errors?: { message: string }[];
   };
   if (!res.ok) {
-    throw new Error(`HTTP ${res.status}: ${JSON.stringify(json).slice(0, 300)}`);
+    throw new Error(
+      formatGqlAuthError(
+        `HTTP ${res.status}: ${JSON.stringify(json).slice(0, 300)}`,
+      ),
+    );
   }
   if (json.errors?.length) {
-    throw new Error(json.errors.map((e) => e.message).join("; "));
+    throw new Error(
+      formatGqlAuthError(json.errors.map((e) => e.message).join("; ")),
+    );
   }
   return json.data;
 }
@@ -72,7 +111,7 @@ async function gql(
   query: string,
   variables?: GqlVars,
 ): Promise<unknown> {
-  const key = apiKey.trim();
+  const key = normalizeGraphApiKey(apiKey);
   if (key) return gqlDirect(key, target, query, variables);
   return gqlProxy(target, query, variables);
 }

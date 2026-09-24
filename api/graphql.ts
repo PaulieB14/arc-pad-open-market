@@ -60,11 +60,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     gatewayPath = `deployments/id/${ipfsHash}`;
   }
 
-  const url = `https://gateway.thegraph.com/api/${key}/${gatewayPath}`;
+  // Studio UUID keys with dashes are "malformed" on the gateway — strip them.
+  const normalized = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
+    key.trim(),
+  )
+    ? key.trim().replace(/-/g, "")
+    : key.trim();
+  const url = `https://gateway.thegraph.com/api/${gatewayPath}`;
   try {
     const upstream = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${normalized}`,
+      },
       body: JSON.stringify({ query, variables }),
     });
     const text = await upstream.text();

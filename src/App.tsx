@@ -12,6 +12,7 @@ import {
   fetchFeaturedLaunches,
   fetchRecentBonded,
   type LifecycleRow,
+  normalizeGraphApiKey,
 } from "./lib/graph";
 import { formatInt, formatUsd, formatUsdFromQuote, shortAddr } from "./lib/format";
 import {
@@ -34,9 +35,16 @@ const FLAG_TIPS: Record<string, string> = {
 
 function readInitialApiKey(): string {
   const stored = localStorage.getItem(API_KEY_STORAGE) ?? "";
-  if (stored.trim()) return stored.trim();
+  if (stored.trim()) {
+    const normalized = normalizeGraphApiKey(stored);
+    // Rewrite dashed UUID keys so a refresh alone recovers from "malformed".
+    if (normalized && normalized !== stored.trim()) {
+      localStorage.setItem(API_KEY_STORAGE, normalized);
+    }
+    return normalized;
+  }
   const fromEnv = import.meta.env.VITE_GRAPH_API_KEY;
-  return typeof fromEnv === "string" ? fromEnv.trim() : "";
+  return typeof fromEnv === "string" ? normalizeGraphApiKey(fromEnv) : "";
 }
 
 function continuityClass(c: HookContinuity): string {
@@ -338,7 +346,8 @@ export default function App() {
   const demoMode = !apiKey.trim();
 
   const saveKey = () => {
-    const k = draftKey.trim();
+    const k = normalizeGraphApiKey(draftKey);
+    setDraftKey(k);
     localStorage.setItem(API_KEY_STORAGE, k);
     setApiKey(k);
   };
@@ -595,9 +604,9 @@ export default function App() {
           </button>
         </div>
         <p className="hint">
-          Demo mode hits an allowlisted <code>/api/graphql</code> proxy (no paste
-          needed). Your own key talks to gateway.thegraph.com with your Studio
-          quota and stays in this browser only.
+          Leave blank for demo mode — no key needed. If you paste a Studio key, use the
+          key alone (not a full URL). UUID keys with dashes are fine; we strip
+          them for the gateway. Keys stay in this browser only.
         </p>
       </section>
 
