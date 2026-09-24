@@ -10,6 +10,12 @@ Joins:
 
 **Try these** one-click demos: **DUKE** (hook continuity), **ARGUS** (legacy → vanilla Uni), plus bonded grads **REGI**, **AQUA**, and **WICKET**.
 
+## UX
+
+- **Shareable deep links** — `?example=DUKE` or `?token=0x…` auto-focuses a lifecycle; Try chips / lookups update the URL via `history.replaceState`. Focused cards have **Copy link**.
+- **DUKE vs ARGUS compare** — side-by-side hero teaching pad-hook-kept vs legacy → vanilla Uni books (pad vol, Uni tip vol, hook kept, line type).
+- **Journey timeline** — focused card shows Pad launch → Bonded → Open market → Hook continuity from real lifecycle fields (no invented timestamps).
+
 ## Run locally
 
 ```bash

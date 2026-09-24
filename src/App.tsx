@@ -14,7 +14,23 @@ import {
   type LifecycleRow,
 } from "./lib/graph";
 import { formatInt, formatUsd, formatUsdFromQuote, shortAddr } from "./lib/format";
+import {
+  buildJourney,
+  hookContinuity,
+  hookContinuityLabel,
+  type HookContinuity,
+} from "./lib/lifecycle";
+import { buildShareUrl, readDeepLink, replaceDeepLink } from "./lib/url";
 import "./App.css";
+
+const FLAG_TIPS: Record<string, string> = {
+  "custom accounting":
+    "Hook uses custom accounting — can adjust balances beyond vanilla swap math.",
+  afterSwap: "afterSwap: runs after the core Uniswap V4 swap settles.",
+  beforeSwap: "beforeSwap: runs before the core swap; can modify or gate the trade.",
+  "Δ after": "afterSwapReturnsDelta: hook can return currency deltas after the swap.",
+  "Δ before": "beforeSwapReturnsDelta: hook can return currency deltas before the swap.",
+};
 
 function readInitialApiKey(): string {
   const stored = localStorage.getItem(API_KEY_STORAGE) ?? "";
@@ -23,23 +39,173 @@ function readInitialApiKey(): string {
   return typeof fromEnv === "string" ? fromEnv.trim() : "";
 }
 
+function continuityClass(c: HookContinuity): string {
+  if (c === "kept") return "hot";
+  if (c === "legacy") return "muted";
+  if (c === "diverged") return "";
+  return "muted";
+}
+
 function HookFlags({ row }: { row: LifecycleRow }) {
   const h = row.hookEntity ?? row.hooksPool?.hook;
   if (!h) {
     if (row.launch.line === "legacy" || !row.launch.hook) {
       return <span className="pill muted">no pad hook</span>;
     }
-    return <span className="pill muted">hook flags on lagged deploy</span>;
+    return (
+      <span
+        className="pill muted"
+        title="Hooks-enhanced deploy may lag tip — flags appear once indexed."
+      >
+        hook flags on lagged deploy
+      </span>
+    );
   }
+  const pills: { key: string; label: string; hot?: boolean }[] = [];
+  if (h.hasCustomAccounting)
+    pills.push({ key: "custom accounting", label: "custom accounting", hot: true });
+  if (h.afterSwap) pills.push({ key: "afterSwap", label: "afterSwap" });
+  if (h.beforeSwap) pills.push({ key: "beforeSwap", label: "beforeSwap" });
+  if (h.afterSwapReturnsDelta) pills.push({ key: "Δ after", label: "Δ after" });
+  if (h.beforeSwapReturnsDelta) pills.push({ key: "Δ before", label: "Δ before" });
+
   return (
     <div className="flags">
-      {h.hasCustomAccounting && <span className="pill hot">custom accounting</span>}
-      {h.afterSwap && <span className="pill">afterSwap</span>}
-      {h.beforeSwap && <span className="pill">beforeSwap</span>}
-      {h.afterSwapReturnsDelta && <span className="pill">Δ after</span>}
-      {h.beforeSwapReturnsDelta && <span className="pill">Δ before</span>}
-      <span className="pill muted">perms {h.permissions}</span>
+      {pills.map((p) => (
+        <span
+          key={p.key}
+          className={`pill${p.hot ? " hot" : ""}`}
+          title={FLAG_TIPS[p.key]}
+        >
+          {p.label}
+        </span>
+      ))}
+      <span className="pill muted" title="Bitmap of enabled hook permissions">
+        perms {h.permissions}
+      </span>
     </div>
+  );
+}
+
+function JourneyTimeline({ row }: { row: LifecycleRow }) {
+  const steps = buildJourney(row);
+  return (
+    <div className="journey" aria-label={`${row.launch.symbol} journey`}>
+      <div className="journey-head">
+        <h3>Journey</h3>
+        <span className="pill muted">{row.launch.symbol}</span>
+      </div>
+      <ol className="journey-strip">
+        {steps.map((step, i) => (
+          <li key={step.id} className={`journey-step ${step.state}`}>
+            <div className="journey-dot" aria-hidden />
+            {i < steps.length - 1 && <div className="journey-line" aria-hidden />}
+            <div className="journey-body">
+              <span className="journey-label">{step.label}</span>
+              <span className="journey-detail">{step.detail}</span>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+function CompareHero({
+  duke,
+  argus,
+  onFocus,
+}: {
+  duke: LifecycleRow | undefined;
+  argus: LifecycleRow | undefined;
+  onFocus: (id: string) => void;
+}) {
+  if (!duke && !argus) return null;
+
+  const cols: { key: string; row: LifecycleRow; story: string; accent: string }[] =
+    [];
+  if (duke) {
+    cols.push({
+      key: "duke",
+      row: duke,
+      story: "Pad hook kept on Uni — hook continuity across graduation.",
+      accent: "kept",
+    });
+  }
+  if (argus) {
+    cols.push({
+      key: "argus",
+      row: argus,
+      story: "Legacy line → vanilla Uni books (no pad hook on the open market).",
+      accent: "legacy",
+    });
+  }
+
+  return (
+    <section className="panel compare-hero">
+      <div className="compare-head">
+        <div>
+          <p className="eyebrow">Hero teaching moment</p>
+          <h2 className="panel-title">DUKE vs ARGUS</h2>
+          <p className="explain-copy">
+            Same pad → open-market join, two endings.{" "}
+            <strong>DUKE</strong> keeps the pad hook on Uniswap;{" "}
+            <strong>ARGUS</strong> is the legacy line that lands on vanilla Uni
+            books.
+          </p>
+        </div>
+      </div>
+      <div className={`compare-grid cols-${cols.length}`}>
+        {cols.map(({ key, row, story, accent }) => {
+          const cont = hookContinuity(row);
+          const tipVol = row.tipPool?.volumeUSD ?? row.tipToken?.volumeUSD;
+          return (
+            <button
+              key={key}
+              type="button"
+              className={`compare-card accent-${accent}`}
+              onClick={() => onFocus(row.launch.id)}
+            >
+              <div className="compare-card-top">
+                <h3>{row.launch.symbol}</h3>
+                <span className={`pill line ${row.launch.line === "hooked" ? "hot" : "muted"}`}>
+                  {row.launch.line || "—"}
+                </span>
+              </div>
+              <p className="compare-story">{story}</p>
+              <dl className="compare-metrics">
+                <div>
+                  <dt>Pad vol</dt>
+                  <dd>{formatUsdFromQuote(row.launch.volumeQuote)}</dd>
+                </div>
+                <div>
+                  <dt>Uni tip vol</dt>
+                  <dd>{formatUsd(tipVol)}</dd>
+                </div>
+                <div>
+                  <dt>Hook kept</dt>
+                  <dd>
+                    <span className={`pill ${continuityClass(cont)}`}>
+                      {cont === "kept" ? "yes" : cont === "legacy" ? "no · legacy" : cont}
+                    </span>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Line type</dt>
+                  <dd className="mono">{row.launch.line || "—"}</dd>
+                </div>
+              </dl>
+              <span className="compare-cta">Focus lifecycle →</span>
+            </button>
+          );
+        })}
+      </div>
+      {(!duke || !argus) && (
+        <p className="hint">
+          Loading both featured tokens for the full side-by-side…
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -47,17 +213,18 @@ function Card({
   row,
   selected,
   cardRef,
+  onCopyLink,
+  copyState,
 }: {
   row: LifecycleRow;
   selected?: boolean;
   cardRef?: (el: HTMLElement | null) => void;
+  onCopyLink?: () => void;
+  copyState?: "idle" | "copied" | "error";
 }) {
   const { launch } = row;
   const tipVol = row.tipPool?.volumeUSD ?? row.tipToken?.volumeUSD;
-  const hookKept =
-    launch.hook &&
-    row.tipPool?.hooks &&
-    launch.hook.toLowerCase() === row.tipPool.hooks.toLowerCase();
+  const cont = hookContinuity(row);
 
   return (
     <article className={`card${selected ? " selected" : ""}`} ref={cardRef}>
@@ -66,10 +233,31 @@ function Card({
           <h2>{launch.symbol}</h2>
           <p className="sub">{launch.name || shortAddr(launch.id, 6)}</p>
         </div>
-        <span className={`pill line ${launch.line === "hooked" ? "hot" : "muted"}`}>
-          {launch.line || "—"}
-        </span>
+        <div className="card-actions">
+          {selected && onCopyLink && (
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                onCopyLink();
+              }}
+              title={buildShareUrl(launch.id)}
+            >
+              {copyState === "copied"
+                ? "Copied"
+                : copyState === "error"
+                  ? "Copy failed"
+                  : "Copy link"}
+            </button>
+          )}
+          <span className={`pill line ${launch.line === "hooked" ? "hot" : "muted"}`}>
+            {launch.line || "—"}
+          </span>
+        </div>
       </header>
+
+      {selected && <JourneyTimeline row={row} />}
 
       <div className="grid2">
         <div>
@@ -111,11 +299,9 @@ function Card({
             <div>
               <dt>Hook continuity</dt>
               <dd>
-                {hookKept === true && <span className="pill hot">pad hook kept</span>}
-                {hookKept === false && row.tipPool?.hooks && (
-                  <span className="pill muted">pool {shortAddr(row.tipPool.hooks)}</span>
-                )}
-                {!row.tipPool && <span className="muted">no pool yet</span>}
+                <span className={`pill ${continuityClass(cont)}`}>
+                  {hookContinuityLabel(cont)}
+                </span>
               </dd>
             </div>
           </dl>
@@ -144,7 +330,10 @@ export default function App() {
   const [err, setErr] = useState<string | null>(null);
   const [tokenLookup, setTokenLookup] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
   const selectedCardEl = useRef<HTMLElement | null>(null);
+  const deepLinkHandled = useRef(false);
+  const pendingDeepLink = useRef<string | null>(null);
 
   const demoMode = !apiKey.trim();
 
@@ -159,6 +348,22 @@ export default function App() {
     setDraftKey("");
     setApiKey("");
   };
+
+  const focusToken = useCallback((id: string, opts?: { scroll?: boolean }) => {
+    const normalized = id.trim().toLowerCase();
+    setSelectedId(normalized);
+    setTokenLookup(normalized);
+    replaceDeepLink(normalized);
+    setCopyState("idle");
+    if (opts?.scroll !== false) {
+      requestAnimationFrame(() => {
+        selectedCardEl.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+        });
+      });
+    }
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -199,15 +404,24 @@ export default function App() {
     void load();
   }, [load]);
 
+  // Capture deep link once on mount
+  useEffect(() => {
+    const link = readDeepLink();
+    if (link.token) {
+      pendingDeepLink.current = link.token;
+      setSelectedId(link.token);
+      setTokenLookup(link.token);
+    }
+  }, []);
+
   const runLookup = useCallback(
-    async (rawId: string) => {
+    async (rawId: string, opts?: { fromDeepLink?: boolean }) => {
       const id = rawId.trim().toLowerCase();
       if (!id.startsWith("0x") || id.length !== 42) {
         setErr("Paste a 0x token address (42 chars).");
         return;
       }
-      setTokenLookup(id);
-      setSelectedId(id);
+      focusToken(id, { scroll: !opts?.fromDeepLink });
       setLookupLoading(true);
       setErr(null);
       try {
@@ -221,22 +435,57 @@ export default function App() {
           const rest = prev.filter((r) => r.launch.id.toLowerCase() !== id);
           return [row, ...rest];
         });
-        requestAnimationFrame(() => {
-          selectedCardEl.current?.scrollIntoView({
-            behavior: "smooth",
-            block: "nearest",
+        if (!opts?.fromDeepLink) {
+          requestAnimationFrame(() => {
+            selectedCardEl.current?.scrollIntoView({
+              behavior: "smooth",
+              block: "nearest",
+            });
           });
-        });
+        }
       } catch (e) {
         setErr(e instanceof Error ? e.message : String(e));
       } finally {
         setLookupLoading(false);
       }
     },
-    [apiKey],
+    [apiKey, focusToken],
   );
 
+  // After featured load, honor pending deep link (select existing or fetch)
+  useEffect(() => {
+    if (deepLinkHandled.current) return;
+    if (loading) return;
+    const pending = pendingDeepLink.current;
+    if (!pending) {
+      deepLinkHandled.current = true;
+      return;
+    }
+    deepLinkHandled.current = true;
+    const existing = featured.find(
+      (r) => r.launch.id.toLowerCase() === pending,
+    );
+    if (existing) {
+      focusToken(pending, { scroll: true });
+      return;
+    }
+    void runLookup(pending, { fromDeepLink: true });
+  }, [loading, featured, focusToken, runLookup]);
+
   const onLookup = () => void runLookup(tokenLookup);
+
+  const onCopyLink = useCallback(async () => {
+    if (!selectedId) return;
+    const share = new URL(buildShareUrl(selectedId), window.location.origin).href;
+    try {
+      await navigator.clipboard.writeText(share);
+      setCopyState("copied");
+      window.setTimeout(() => setCopyState("idle"), 1800);
+    } catch {
+      setCopyState("error");
+      window.setTimeout(() => setCopyState("idle"), 1800);
+    }
+  }, [selectedId]);
 
   const tipBlock = useMemo(
     () => featured.find((r) => r.tipMeta)?.tipMeta?.block,
@@ -249,6 +498,25 @@ export default function App() {
         ? featured.find((r) => r.launch.id.toLowerCase() === selectedId.toLowerCase())
         : undefined,
     [featured, selectedId],
+  );
+
+  const dukeRow = useMemo(
+    () =>
+      featured.find(
+        (r) =>
+          r.launch.id.toLowerCase() ===
+          "0x41358defd0dedc90528b3f1835715e907b686e6a",
+      ),
+    [featured],
+  );
+  const argusRow = useMemo(
+    () =>
+      featured.find(
+        (r) =>
+          r.launch.id.toLowerCase() ===
+          "0xece5ca8bf9220718e5727754026757512212cb3c",
+      ),
+    [featured],
   );
 
   const busy = loading || lookupLoading;
@@ -286,9 +554,16 @@ export default function App() {
           volume + <code>Pool.hooks</code>), and a lagged{" "}
           <strong>hooks-enhanced</strong> deploy (permission flags, custom
           accounting). Click an example to load the story instantly — no key
-          required in demo mode.
+          required in demo mode. Share any focus with{" "}
+          <code>?example=DUKE</code> or <code>?token=0x…</code>.
         </p>
       </section>
+
+      <CompareHero
+        duke={dukeRow}
+        argus={argusRow}
+        onFocus={(id) => void runLookup(id)}
+      />
 
       <section className="panel key-panel">
         <label>
@@ -332,7 +607,7 @@ export default function App() {
             <h2 className="panel-title">Try these</h2>
             <p className="hint tight">
               One click loads a real bonded graduate and runs the pad → open
-              market join.
+              market join. URL updates for sharing.
             </p>
           </div>
           {lookupLoading && <span className="pill hot">Looking up…</span>}
@@ -408,6 +683,8 @@ export default function App() {
                 key={row.launch.id}
                 row={row}
                 selected={isSelected}
+                onCopyLink={isSelected ? onCopyLink : undefined}
+                copyState={isSelected ? copyState : undefined}
                 cardRef={
                   isSelected
                     ? (el) => {
@@ -449,11 +726,7 @@ export default function App() {
             </thead>
             <tbody>
               {recent.map((row) => {
-                const kept =
-                  row.launch.hook &&
-                  row.tipPool?.hooks &&
-                  row.launch.hook.toLowerCase() ===
-                    row.tipPool.hooks.toLowerCase();
+                const cont = hookContinuity(row);
                 return (
                   <tr
                     key={row.launch.id}
@@ -490,7 +763,13 @@ export default function App() {
                       )}
                     </td>
                     <td>
-                      {kept ? "yes" : row.launch.hook ? "check pool" : "n/a"}
+                      {cont === "kept"
+                        ? "yes"
+                        : cont === "legacy"
+                          ? "n/a"
+                          : cont === "diverged"
+                            ? "check pool"
+                            : "—"}
                     </td>
                     <td>
                       <HookFlags row={row} />
