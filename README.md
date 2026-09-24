@@ -8,7 +8,7 @@ Joins:
 - **Uni V4 Arc (tip)** `7xLobfNG9xx8yM5hkxagRuPmdjCJP4Kj9vtomrn9LrRM` — open-market volume, `Pool.hooks` string
 - **Uni V4 Arc hooks IPFS** `Qmdyx7tqmQzyQu7viYqqfE3oNYs8EtxhcPs1VHBfXi7p2p` — `Hook` entity, permission flags, custom accounting (may lag tip)
 
-Featured demos: **DUKE** (hooked pad → same hook on Uni) and **ARGUS** (legacy pad → vanilla Uni).
+**Try these** one-click demos: **DUKE** (hook continuity), **ARGUS** (legacy → vanilla Uni), plus bonded grads **REGI**, **AQUA**, and **WICKET**.
 
 ## Run locally
 
@@ -17,16 +17,18 @@ npm install
 npm run dev
 ```
 
-Open the app, paste a [Subgraph Studio](https://thegraph.com/studio/) / gateway API key (stored in `localStorage` only), then **Refresh**.
+Without a key, the UI runs in **demo mode** and calls `/api/graphql` (needs `GRAPH_STUDIO_API_KEY` on the host — use `vercel dev` or deploy). Or paste a Subgraph Studio / gateway key in the UI (stored in `localStorage` only); that path hits the gateway with your quota.
 
 ```bash
 npm run build
 npm run preview
 ```
 
-## Deploy
+## Deploy (Vercel)
 
-Any static host works (GitHub Pages, Vercel, Netlify). No server secrets required — users bring their own gateway key in the UI.
+1. Connect the repo — Vite build + `api/graphql.ts` serverless route.
+2. Set **server** env `GRAPH_STUDIO_API_KEY` (Production + Preview). Do **not** use a `VITE_` prefix.
+3. The proxy allowlists only the three Argus / Uni tip / hooks IDs above.
 
 ## Notes
 

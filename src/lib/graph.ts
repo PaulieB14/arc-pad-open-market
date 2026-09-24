@@ -6,11 +6,20 @@ import {
 
 type GqlVars = Record<string, unknown>;
 
-async function gql(
-  url: string,
+type GqlTarget =
+  | { subgraphId: string; ipfsHash?: never }
+  | { ipfsHash: string; subgraphId?: never };
+
+async function gqlDirect(
+  apiKey: string,
+  target: GqlTarget,
   query: string,
   variables?: GqlVars,
 ): Promise<unknown> {
+  const path = target.subgraphId
+    ? `subgraphs/id/${target.subgraphId}`
+    : `deployments/id/${target.ipfsHash}`;
+  const url = `https://gateway.thegraph.com/api/${apiKey}/${path}`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -29,12 +38,43 @@ async function gql(
   return json.data;
 }
 
-function subgraphUrl(apiKey: string, subgraphId: string) {
-  return `https://gateway.thegraph.com/api/${apiKey}/subgraphs/id/${subgraphId}`;
+async function gqlProxy(
+  target: GqlTarget,
+  query: string,
+  variables?: GqlVars,
+): Promise<unknown> {
+  const res = await fetch("/api/graphql", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...target, query, variables }),
+  });
+  const json = (await res.json()) as {
+    data?: unknown;
+    errors?: { message: string }[];
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(
+      json.error ||
+        `Demo proxy HTTP ${res.status}: ${JSON.stringify(json).slice(0, 300)}`,
+    );
+  }
+  if (json.errors?.length) {
+    throw new Error(json.errors.map((e) => e.message).join("; "));
+  }
+  return json.data;
 }
 
-function deploymentUrl(apiKey: string, ipfs: string) {
-  return `https://gateway.thegraph.com/api/${apiKey}/deployments/id/${ipfs}`;
+/** Empty / missing apiKey → Vercel demo proxy; otherwise call gateway with the user's key. */
+async function gql(
+  apiKey: string,
+  target: GqlTarget,
+  query: string,
+  variables?: GqlVars,
+): Promise<unknown> {
+  const key = apiKey.trim();
+  if (key) return gqlDirect(key, target, query, variables);
+  return gqlProxy(target, query, variables);
 }
 
 export type Launch = {
@@ -101,7 +141,8 @@ const LAUNCH_FIELDS = `
 
 export async function fetchFeaturedLaunches(apiKey: string, ids: string[]) {
   const data = (await gql(
-    subgraphUrl(apiKey, ARGUS_SUBGRAPH_ID),
+    apiKey,
+    { subgraphId: ARGUS_SUBGRAPH_ID },
     `query($ids: [ID!]!) {
       launches(where: { id_in: $ids }) { ${LAUNCH_FIELDS} }
     }`,
@@ -112,7 +153,8 @@ export async function fetchFeaturedLaunches(apiKey: string, ids: string[]) {
 
 export async function fetchRecentBonded(apiKey: string, first = 20) {
   const data = (await gql(
-    subgraphUrl(apiKey, ARGUS_SUBGRAPH_ID),
+    apiKey,
+    { subgraphId: ARGUS_SUBGRAPH_ID },
     `query($first: Int!) {
       launches(
         where: { bonded: true }
@@ -141,7 +183,8 @@ export async function fetchUniTipJoin(
 
   if (poolId) {
     return (await gql(
-      subgraphUrl(apiKey, UNI_ARC_SUBGRAPH_ID),
+      apiKey,
+      { subgraphId: UNI_ARC_SUBGRAPH_ID },
       `query($token: ID!, $pool: ID!) {
         _meta { block { number } }
         token(id: $token) {
@@ -168,7 +211,8 @@ export async function fetchUniTipJoin(
   }
 
   const data = (await gql(
-    subgraphUrl(apiKey, UNI_ARC_SUBGRAPH_ID),
+    apiKey,
+    { subgraphId: UNI_ARC_SUBGRAPH_ID },
     `query($token: ID!) {
       _meta { block { number } }
       token(id: $token) {
@@ -231,7 +275,8 @@ export async function fetchUniHooksJoin(
   }
 
   return (await gql(
-    deploymentUrl(apiKey, UNI_HOOKS_IPFS),
+    apiKey,
+    { ipfsHash: UNI_HOOKS_IPFS },
     `query(${varDefs.join(", ")}) { ${parts.join("\n")} }`,
     vars,
   )) as {
