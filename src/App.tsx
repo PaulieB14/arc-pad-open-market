@@ -106,8 +106,10 @@ function JourneyTimeline({ row }: { row: LifecycleRow }) {
       <ol className="journey-strip">
         {steps.map((step, i) => (
           <li key={step.id} className={`journey-step ${step.state}`}>
-            <div className="journey-dot" aria-hidden />
-            {i < steps.length - 1 && <div className="journey-line" aria-hidden />}
+            <div className="journey-track" aria-hidden="true">
+              <span className="journey-dot" />
+              {i < steps.length - 1 && <span className="journey-line" />}
+            </div>
             <div className="journey-body">
               <span className="journey-label">{step.label}</span>
               <span className="journey-detail">{step.detail}</span>
@@ -237,9 +239,9 @@ function Card({
   return (
     <article className={`card${selected ? " selected" : ""}`} ref={cardRef}>
       <header>
-        <div>
-          <h2>{launch.symbol}</h2>
-          <p className="sub">{launch.name || shortAddr(launch.id, 6)}</p>
+        <div className="card-titles">
+          <h2 className="card-symbol">{launch.symbol}</h2>
+          <p className="card-name">{launch.name || shortAddr(launch.id, 6)}</p>
         </div>
         <div className="card-actions">
           {selected && onCopyLink && (
@@ -268,43 +270,43 @@ function Card({
       {selected && <JourneyTimeline row={row} />}
 
       <div className="grid2">
-        <div>
+        <div className="metric-block">
           <h3>Argus pad</h3>
-          <dl>
-            <div>
+          <dl className="metric-list">
+            <div className="metric">
               <dt>Pad volume</dt>
               <dd>{formatUsdFromQuote(launch.volumeQuote)}</dd>
             </div>
-            <div>
+            <div className="metric">
               <dt>Pad swaps</dt>
               <dd>{formatInt(launch.swapCount)}</dd>
             </div>
-            <div>
+            <div className="metric">
               <dt>Holders</dt>
               <dd>{formatInt(launch.holderCount)}</dd>
             </div>
-            <div>
+            <div className="metric">
               <dt>Pad hook</dt>
               <dd className="mono">{shortAddr(launch.hook, 4)}</dd>
             </div>
           </dl>
         </div>
-        <div>
+        <div className="metric-block">
           <h3>Uni open market</h3>
-          <dl>
-            <div>
+          <dl className="metric-list">
+            <div className="metric">
               <dt>Pool / token vol (tip)</dt>
               <dd>{formatUsd(tipVol)}</dd>
             </div>
-            <div>
+            <div className="metric">
               <dt>Pool txs</dt>
               <dd>{formatInt(row.tipPool?.txCount)}</dd>
             </div>
-            <div>
+            <div className="metric">
               <dt>Fee tier</dt>
               <dd>{row.tipPool?.feeTier ?? "—"}</dd>
             </div>
-            <div>
+            <div className="metric">
               <dt>Hook continuity</dt>
               <dd>
                 <span className={`pill ${continuityClass(cont)}`}>
