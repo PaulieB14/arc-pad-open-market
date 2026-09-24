@@ -1,0 +1,115 @@
+:root {
+  color-scheme: dark;
+  --bg: #0b0f14;
+  --panel: #121821;
+  --card: #161e2a;
+  --border: #243044;
+  --text: #e8eef7;
+  --muted: #8b9bb4;
+  --accent: #6ee7b7;
+  --accent2: #7dd3fc;
+  --hot: #fbbf24;
+  --danger: #fb7185;
+  --font: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: var(--font);
+  background: radial-gradient(1200px 600px at 10% -10%, #132033 0%, var(--bg) 55%);
+  color: var(--text);
+  min-height: 100vh;
+}
+#root { max-width: 1100px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+
+.page { display: flex; flex-direction: column; gap: 1.75rem; }
+.hero h1 { font-size: clamp(1.8rem, 4vw, 2.6rem); margin: 0.2rem 0 0.5rem; letter-spacing: -0.02em; }
+.eyebrow { color: var(--accent); text-transform: uppercase; letter-spacing: 0.12em; font-size: 0.75rem; margin: 0; }
+.lede { color: var(--muted); max-width: 52rem; line-height: 1.5; margin: 0; }
+.meta-line { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 1rem; }
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1rem 1.1rem;
+}
+label { display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.85rem; color: var(--muted); flex: 1; }
+input {
+  background: #0d131c;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  padding: 0.65rem 0.75rem;
+  font-size: 0.95rem;
+  font-family: var(--mono);
+}
+.row, .lookup { display: flex; gap: 0.75rem; align-items: end; flex-wrap: wrap; }
+.key-panel .row { margin-top: 0.75rem; }
+
+button {
+  background: linear-gradient(135deg, #34d399, #22d3ee);
+  color: #062016;
+  border: none;
+  border-radius: 10px;
+  padding: 0.65rem 1rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+button.secondary { background: #1c2738; color: var(--text); border: 1px solid var(--border); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.section-title { margin: 0 0 0.75rem; font-size: 1.15rem; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; }
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1rem 1.1rem 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+.card header { display: flex; justify-content: space-between; gap: 0.75rem; align-items: start; }
+.card h2 { margin: 0; font-size: 1.35rem; }
+.sub { margin: 0.15rem 0 0; color: var(--muted); font-size: 0.85rem; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; }
+@media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+.card h3 { margin: 0 0 0.35rem; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent2); }
+dl { margin: 0; display: grid; gap: 0.35rem; }
+dl > div { display: flex; justify-content: space-between; gap: 0.5rem; font-size: 0.9rem; }
+dt { color: var(--muted); }
+dd { margin: 0; font-weight: 600; text-align: right; }
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.72rem;
+  border: 1px solid var(--border);
+  background: #0f1622;
+  color: var(--text);
+  white-space: nowrap;
+}
+.pill.hot { border-color: #92680f; background: #2a210c; color: var(--hot); }
+.pill.muted { color: var(--muted); }
+.pill.line { text-transform: uppercase; letter-spacing: 0.04em; }
+.flags { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+
+.hint { color: var(--muted); font-size: 0.8rem; margin: 0.5rem 0 0; }
+.err { color: var(--danger); font-size: 0.9rem; margin: 0; }
+.err.banner { background: #2a1218; border: 1px solid #5c2430; padding: 0.75rem 1rem; border-radius: 10px; }
+.mono { font-family: var(--mono); }
+.tiny { font-size: 0.72rem; color: var(--muted); word-break: break-all; }
+.muted { color: var(--muted); }
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 14px; background: var(--card); }
+table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+th, td { padding: 0.7rem 0.8rem; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; }
+tr:last-child td { border-bottom: none; }
+
+.foot { color: var(--muted); font-size: 0.8rem; margin-top: 1rem; }
